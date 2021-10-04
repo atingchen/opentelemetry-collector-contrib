@@ -163,6 +163,13 @@ func getPromLabels(lbs ...string) []prompb.Label {
 	return pbLbs.Labels
 }
 
+//
+func getPromExemplar() []prompb.Exemplar {
+	var pbExemplars []prompb.Exemplar
+
+	return pbExemplars
+}
+
 func getLabel(name string, value string) prompb.Label {
 	return prompb.Label{
 		Name:  name,

@@ -65,7 +65,7 @@ func validateMetrics(metric pdata.Metric) bool {
 // addSample finds a TimeSeries in tsMap that corresponds to the label set labels, and add sample to the TimeSeries; it
 // creates a new TimeSeries in the map if not found. tsMap is unmodified if either of its parameters is nil.
 func addSample(tsMap map[string]*prompb.TimeSeries, sample *prompb.Sample, labels []prompb.Label,
-	metric pdata.Metric) {
+	exemplars []prompb.Exemplar, metric pdata.Metric) {
 
 	if sample == nil || labels == nil || tsMap == nil {
 		return
@@ -76,10 +76,12 @@ func addSample(tsMap map[string]*prompb.TimeSeries, sample *prompb.Sample, label
 
 	if ok {
 		ts.Samples = append(ts.Samples, *sample)
+		ts.Exemplars = append(ts.Exemplars, exemplars...)
 	} else {
 		newTs := &prompb.TimeSeries{
-			Labels:  labels,
-			Samples: []prompb.Sample{*sample},
+			Labels:    labels,
+			Samples:   []prompb.Sample{*sample},
+			Exemplars: exemplars,
 		}
 		tsMap[sig] = newTs
 	}
@@ -276,7 +278,9 @@ func addSingleNumberDataPoint(pt pdata.NumberDataPoint, resource pdata.Resource,
 	case pdata.MetricValueTypeDouble:
 		sample.Value = pt.DoubleVal()
 	}
-	addSample(tsMap, sample, labels, metric)
+	exemplars := convertOTLPExemplarToPromExemplar(pt.Exemplars())
+	addSample(tsMap, sample, labels, exemplars, metric)
+
 }
 
 // addSingleHistogramDataPoint converts pt to 2 + min(len(ExplicitBounds), len(BucketCount)) + 1 samples. It
@@ -293,7 +297,8 @@ func addSingleHistogramDataPoint(pt pdata.HistogramDataPoint, resource pdata.Res
 	}
 
 	sumlabels := createAttributes(resource, pt.Attributes(), externalLabels, nameStr, baseName+sumStr)
-	addSample(tsMap, sum, sumlabels, metric)
+	exemplars := convertOTLPExemplarToPromExemplar(pt.Exemplars())
+	addSample(tsMap, sum, sumlabels, exemplars, metric)
 
 	// treat count as a sample in an individual TimeSeries
 	count := &prompb.Sample{
@@ -301,7 +306,7 @@ func addSingleHistogramDataPoint(pt pdata.HistogramDataPoint, resource pdata.Res
 		Timestamp: time,
 	}
 	countlabels := createAttributes(resource, pt.Attributes(), externalLabels, nameStr, baseName+countStr)
-	addSample(tsMap, count, countlabels, metric)
+	addSample(tsMap, count, countlabels, exemplars, metric)
 
 	// cumulative count for conversion to cumulative histogram
 	var cumulativeCount uint64
@@ -318,7 +323,7 @@ func addSingleHistogramDataPoint(pt pdata.HistogramDataPoint, resource pdata.Res
 		}
 		boundStr := strconv.FormatFloat(bound, 'f', -1, 64)
 		labels := createAttributes(resource, pt.Attributes(), externalLabels, nameStr, baseName+bucketStr, leStr, boundStr)
-		addSample(tsMap, bucket, labels, metric)
+		addSample(tsMap, bucket, labels, exemplars, metric)
 	}
 	// add le=+Inf bucket
 	cumulativeCount += pt.BucketCounts()[len(pt.BucketCounts())-1]
@@ -327,7 +332,7 @@ func addSingleHistogramDataPoint(pt pdata.HistogramDataPoint, resource pdata.Res
 		Timestamp: time,
 	}
 	infLabels := createAttributes(resource, pt.Attributes(), externalLabels, nameStr, baseName+bucketStr, leStr, pInfStr)
-	addSample(tsMap, infBucket, infLabels, metric)
+	addSample(tsMap, infBucket, infLabels, exemplars, metric)
 }
 
 // addSingleSummaryDataPoint converts pt to len(QuantileValues) + 2 samples.
@@ -341,9 +346,10 @@ func addSingleSummaryDataPoint(pt pdata.SummaryDataPoint, resource pdata.Resourc
 		Value:     pt.Sum(),
 		Timestamp: time,
 	}
+	exemplars := []prompb.Exemplar{}
 
 	sumlabels := createAttributes(resource, pt.Attributes(), externalLabels, nameStr, baseName+sumStr)
-	addSample(tsMap, sum, sumlabels, metric)
+	addSample(tsMap, sum, sumlabels, nil, metric)
 
 	// treat count as a sample in an individual TimeSeries
 	count := &prompb.Sample{
@@ -351,7 +357,7 @@ func addSingleSummaryDataPoint(pt pdata.SummaryDataPoint, resource pdata.Resourc
 		Timestamp: time,
 	}
 	countlabels := createAttributes(resource, pt.Attributes(), externalLabels, nameStr, baseName+countStr)
-	addSample(tsMap, count, countlabels, metric)
+	addSample(tsMap, count, countlabels, exemplars, metric)
 
 	// process each percentile/quantile
 	for i := 0; i < pt.QuantileValues().Len(); i++ {
@@ -362,7 +368,7 @@ func addSingleSummaryDataPoint(pt pdata.SummaryDataPoint, resource pdata.Resourc
 		}
 		percentileStr := strconv.FormatFloat(qt.Quantile(), 'f', -1, 64)
 		qtlabels := createAttributes(resource, pt.Attributes(), externalLabels, nameStr, baseName, quantileStr, percentileStr)
-		addSample(tsMap, quantile, qtlabels, metric)
+		addSample(tsMap, quantile, qtlabels, exemplars, metric)
 	}
 }
 
@@ -376,6 +382,35 @@ func orderBySampleTimestamp(tsArray []prompb.TimeSeries) []prompb.TimeSeries {
 	return tsArray
 }
 
+func convertOTLPExemplarToPromExemplar(exemplars pdata.ExemplarSlice) []prompb.Exemplar {
+	var promExemplars []prompb.Exemplar
+	for x := 0; x < exemplars.Len(); x++ {
+		exemplar := exemplars.At(x)
+		var labels []prompb.Label
+		attributes := exemplar.FilteredAttributes()
+		attributes.Range(func(k string, v pdata.AttributeValue) bool {
+			labels = append(labels, prompb.Label{
+				Name:  k,
+				Value: v.StringVal(),
+			})
+			return true
+		})
+		//// 如果有spanID
+		//if !exemplar.SpanID().IsEmpty(){
+		//	labels = append(labels,prompb.Label{Name: "span_id",Value: exemplar.SpanID().HexString()})
+		//}
+		//// 如果有traceID
+		//if !exemplar.TraceID().IsEmpty(){
+		//	labels = append(labels,prompb.Label{Name: "trace_id",Value: exemplar.TraceID().HexString()})
+		//}
+		promExemplars = append(promExemplars, prompb.Exemplar{
+			Labels:    labels,
+			Value:     exemplar.DoubleVal(),
+			Timestamp: int64(exemplar.Timestamp()),
+		})
+	}
+	return promExemplars
+}
 func convertTimeseriesToRequest(tsArray []prompb.TimeSeries) *prompb.WriteRequest {
 	// the remote_write endpoint only requires the timeseries.
 	// otlp defines it's own way to handle metric metadata

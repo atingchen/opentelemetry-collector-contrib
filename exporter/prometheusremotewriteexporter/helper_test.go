@@ -71,9 +71,10 @@ func Test_validateMetrics(t *testing.T) {
 // case.
 func Test_addSample(t *testing.T) {
 	type testCase struct {
-		metric pdata.Metric
-		sample prompb.Sample
-		labels []prompb.Label
+		metric    pdata.Metric
+		sample    prompb.Sample
+		labels    []prompb.Label
+		exemplars []prompb.Exemplar
 	}
 
 	tests := []struct {
@@ -89,11 +90,13 @@ func Test_addSample(t *testing.T) {
 				{validMetrics1[validDoubleGauge],
 					getSample(floatVal1, msTime1),
 					promLbs1,
+					getPromExemplar(),
 				},
 				{
 					validMetrics1[validDoubleGauge],
 					getSample(floatVal2, msTime2),
 					promLbs1,
+					getPromExemplar(),
 				},
 			},
 			twoPointsSameTs,
@@ -105,10 +108,12 @@ func Test_addSample(t *testing.T) {
 				{validMetrics1[validIntGauge],
 					getSample(float64(intVal1), msTime1),
 					promLbs1,
+					getPromExemplar(),
 				},
 				{validMetrics1[validIntGauge],
 					getSample(float64(intVal1), msTime2),
 					promLbs2,
+					getPromExemplar(),
 				},
 			},
 			twoPointsDifferentTs,
@@ -116,14 +121,16 @@ func Test_addSample(t *testing.T) {
 	}
 	t.Run("empty_case", func(t *testing.T) {
 		tsMap := map[string]*prompb.TimeSeries{}
-		addSample(tsMap, nil, nil, pdata.NewMetric())
+		addSample(tsMap, nil, nil, nil, pdata.NewMetric())
 		assert.Exactly(t, tsMap, map[string]*prompb.TimeSeries{})
 	})
 	// run tests
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			addSample(tt.orig, &tt.testCase[0].sample, tt.testCase[0].labels, tt.testCase[0].metric)
-			addSample(tt.orig, &tt.testCase[1].sample, tt.testCase[1].labels, tt.testCase[1].metric)
+			addSample(tt.orig, &tt.testCase[0].sample, tt.testCase[0].labels,
+				tt.testCase[0].exemplars, tt.testCase[0].metric)
+			addSample(tt.orig, &tt.testCase[1].sample, tt.testCase[1].labels,
+				tt.testCase[1].exemplars, tt.testCase[1].metric)
 			assert.Exactly(t, tt.want, tt.orig)
 		})
 	}
