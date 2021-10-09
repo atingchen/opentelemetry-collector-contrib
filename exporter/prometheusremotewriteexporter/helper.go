@@ -406,7 +406,7 @@ func convertOTLPExemplarToPromExemplar(exemplars pdata.ExemplarSlice) []prompb.E
 		promExemplars = append(promExemplars, prompb.Exemplar{
 			Labels:    labels,
 			Value:     exemplar.DoubleVal(),
-			Timestamp: int64(exemplar.Timestamp()),
+			Timestamp: convertTimeStamp(exemplar.Timestamp()),
 		})
 	}
 	return promExemplars
