@@ -16,6 +16,7 @@ package prometheusremotewriteexporter
 
 import (
 	"errors"
+	"github.com/prometheus/prometheus/pkg/timestamp"
 	"log"
 	"sort"
 	"strconv"
@@ -406,7 +407,7 @@ func convertOTLPExemplarToPromExemplar(exemplars pdata.ExemplarSlice) []prompb.E
 		promExemplars = append(promExemplars, prompb.Exemplar{
 			Labels:    labels,
 			Value:     exemplar.DoubleVal(),
-			Timestamp: convertTimeStamp(exemplar.Timestamp()),
+			Timestamp: timestamp.FromTime(exemplar.Timestamp().AsTime()),
 		})
 	}
 	return promExemplars
