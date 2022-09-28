@@ -15,6 +15,7 @@
 package fileconsumer // import "github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/fileconsumer"
 
 import (
+	"bufio"
 	"fmt"
 	"time"
 
@@ -58,6 +59,10 @@ type Config struct {
 	MaxLogSize              helper.ByteSize       `mapstructure:"max_log_size,omitempty"                   json:"max_log_size,omitempty"                  yaml:"max_log_size,omitempty"`
 	MaxConcurrentFiles      int                   `mapstructure:"max_concurrent_files,omitempty"           json:"max_concurrent_files,omitempty"          yaml:"max_concurrent_files,omitempty"`
 	Splitter                helper.SplitterConfig `mapstructure:",squash,omitempty"                        json:",inline,omitempty"                       yaml:",inline,omitempty"`
+}
+
+func (c Config) SetSplitter(splitter bufio.SplitFunc) {
+	c.Splitter.CreateCustomizedSplitter(splitter)
 }
 
 // Build will build a file input operator from the supplied configuration

@@ -348,9 +348,10 @@ func trimWhitespaces(data []byte) []byte {
 
 // SplitterConfig consolidates MultilineConfig and FlusherConfig
 type SplitterConfig struct {
-	EncodingConfig EncodingConfig  `mapstructure:",squash,omitempty"                        json:",inline,omitempty"                       yaml:",inline,omitempty"`
-	Multiline      MultilineConfig `mapstructure:"multiline,omitempty"                      json:"multiline,omitempty"                     yaml:"multiline,omitempty"`
-	Flusher        FlusherConfig   `mapstructure:",squash,omitempty"                        json:",inline,omitempty"                       yaml:",inline,omitempty"`
+	EncodingConfig     EncodingConfig  `mapstructure:",squash,omitempty"                        json:",inline,omitempty"                       yaml:",inline,omitempty"`
+	Multiline          MultilineConfig `mapstructure:"multiline,omitempty"                      json:"multiline,omitempty"                     yaml:"multiline,omitempty"`
+	Flusher            FlusherConfig   `mapstructure:",squash,omitempty"                        json:",inline,omitempty"                       yaml:",inline,omitempty"`
+	CustomizedSplitter bufio.SplitFunc
 }
 
 // NewSplitterConfig returns default SplitterConfig
@@ -362,6 +363,10 @@ func NewSplitterConfig() SplitterConfig {
 	}
 }
 
+func (c *SplitterConfig) CreateCustomizedSplitter(splitter bufio.SplitFunc) {
+	c.CustomizedSplitter = splitter
+}
+
 // Build builds Splitter struct
 func (c *SplitterConfig) Build(flushAtEOF bool, maxLogSize int) (*Splitter, error) {
 	enc, err := c.EncodingConfig.Build()
@@ -370,12 +375,15 @@ func (c *SplitterConfig) Build(flushAtEOF bool, maxLogSize int) (*Splitter, erro
 	}
 
 	flusher := c.Flusher.Build()
-	splitFunc, err := c.Multiline.Build(enc.Encoding, flushAtEOF, flusher, maxLogSize)
-
-	if err != nil {
-		return nil, err
+	var splitFunc bufio.SplitFunc
+	if c.CustomizedSplitter != nil {
+		splitFunc = c.CustomizedSplitter
+	} else {
+		splitFunc, err = c.Multiline.Build(enc.Encoding, flushAtEOF, flusher, maxLogSize)
+		if err != nil {
+			return nil, err
+		}
 	}
-
 	return &Splitter{
 		Encoding:  enc,
 		Flusher:   flusher,

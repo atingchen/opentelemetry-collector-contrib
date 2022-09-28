@@ -16,7 +16,7 @@ package otlpjsonfilereceiver // import "github.com/open-telemetry/opentelemetry-
 
 import (
 	"context"
-
+	"encoding/binary"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/consumer"
@@ -84,6 +84,26 @@ func createLogsReceiver(_ context.Context, settings component.ReceiverCreateSett
 		ReceiverCreateSettings: settings,
 	})
 	cfg := configuration.(*Config)
+	cfg.SetSplitter(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
+		if atEOF && len(data) < 4 {
+			return 0, nil, nil
+		}
+		// read length
+		length := binary.BigEndian.Uint32(data[:4])
+		if length > 0 {
+			token = data[4:length]
+			return int(4 + length), token, nil
+		}
+		// Flush if no more data is expected
+		if atEOF {
+			token = data[4:]
+			advance = len(data[4:])
+			return
+		}
+
+		// Request more data.
+		return 0, nil, nil
+	})
 	input, err := cfg.Config.Build(settings.Logger.Sugar(), func(ctx context.Context, attrs *fileconsumer.FileAttributes, token []byte) {
 		ctx = obsrecv.StartLogsOp(ctx)
 		l, err := logsUnmarshaler.UnmarshalLogs(token)
