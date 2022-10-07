@@ -3,7 +3,9 @@ module github.com/open-telemetry/opentelemetry-collector-contrib/processor/obfus
 go 1.18
 
 require (
-	github.com/cyrildever/feistel v1.3.17
+	github.com/cyrildever/feistel v1.4.0
+	github.com/ehmry/encoding v0.0.0-20141209173106-f6cacf04761e
+	github.com/spf13/cast v1.5.0
 	github.com/stretchr/testify v1.8.0
 	go.opentelemetry.io/collector v0.61.0
 	go.opentelemetry.io/collector/pdata v0.61.0
