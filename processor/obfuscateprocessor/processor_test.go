@@ -3,17 +3,16 @@ package obfuscateprocessor
 import (
 	"fmt"
 	"github.com/cyrildever/feistel"
-	"github.com/stretchr/testify/assert"
+	"github.com/cyrildever/feistel/common/utils/hash"
+	"github.com/spf13/cast"
 	"testing"
 )
 
 func TestFormatPreservingEncryption(t *testing.T) {
-	source := "123123123"
+	source := 99 // 9 digits
+	cipher := feistel.NewFPECipher(hash.SHA_256, "some-32-byte-long-key-to-be-safe", 128)
 
-	// Encrypt
-	cipher := feistel.NewCipher("some-32-byte-long-key-to-be-safe", 10)
-	obfuscated, err := cipher.Encrypt(source)
-	assert.NoError(t, err)
-	fmt.Println(string(obfuscated))
+	obfuscated, _ := cipher.EncryptNumber(cast.ToUint64(source))
+	fmt.Println(obfuscated.Uint64())
 
 }

@@ -1,0 +1,9 @@
+obfuscation:
+  encrypt_key: "some-32-byte-long-key-to-be-safe"
+  encrypt_round: 128
+  encrypt_attributes:
+    - age
+    - name
+    - id
+
+obfuscation/empty:
